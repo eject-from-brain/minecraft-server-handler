@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<TabPane xmlns="http://javafx.com/javafx/17.0.2-ea" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.ejectfb.serverhandler.ServerController">
+    <tabs>
+        <!-- Первая вкладка - Minecraft Сервер -->
+        <Tab text="Minecraft Сервер">
+            <VBox spacing="10">
+                <padding>
+                    <Insets bottom="10" left="10" right="10" top="10" />
+                </padding>
+
+                <Label text="Команда запуска сервера:" />
+                <TextField fx:id="serverCommandField" />
+
+                <HBox spacing="10">
+                    <Button fx:id="startStopButton" onAction="#handleStartStop" text="Запустить" />
+                    <Button fx:id="restartButton" onAction="#handleRestart" text="Перезапустить" />
+                    <Button fx:id="statsButton" onAction="#handleSendStats" text="Статистика" />
+                    <Button text="Очистить консоль" onAction="#handleClearConsole"/>
+                </HBox>
+
+                <Separator />
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Интервал опроса (часы):" />
+                    <TextField fx:id="pollIntervalField" prefColumnCount="3" />
+                    <Button fx:id="applyIntervalButton" onAction="#handleApplyInterval" text="Применить" />
+                </HBox>
+
+                <Separator />
+
+                <Label text="Консоль сервера:" />
+                <TextArea fx:id="consoleOutput" editable="false" style="-fx-font-family: 'Consolas'; -fx-font-size: 12px;" wrapText="true" />
+
+                <Label text="Команда сервера (Enter для отправки):" />
+                <TextField fx:id="serverCommandInput" onKeyPressed="#handleConsoleInput" />
+
+                <HBox alignment="CENTER_RIGHT">
+                    <Label fx:id="lineCounterLabel" text="Строк: 0/200" style="-fx-text-fill: gray; -fx-font-size: 10px;"/>
+                </HBox>
+            </VBox>
+        </Tab>
+
+        <!-- Вторая вкладка - Настройка Телеграм Бота -->
+        <Tab text="Настройка Телеграм Бота">
+            <VBox spacing="10">
+                <padding>
+                    <Insets bottom="10" left="10" right="10" top="10" />
+                </padding>
+
+                <Label style="-fx-font-weight: bold;" text="Настройки Telegram Bot:" />
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label minWidth="80" text="Bot Token:" />
+                    <PasswordField fx:id="botTokenField" promptText="Введите токен бота" style="-fx-min-width: 300px;" />
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label minWidth="80" text="Chat ID:" />
+                    <TextField fx:id="chatIdField" promptText="Введите chat ID" style="-fx-min-width: 300px;" />
+                </HBox>
+
+                <Button onAction="#testTelegramConnection" style="-fx-font-weight: bold;" text="Проверить соединение" />
+
+                <Separator />
+
+                <Label style="-fx-font-weight: bold;" text="Примечание:" />
+                <VBox spacing="2">
+                    <Label style="-fx-font-size: 11px;" text="Для работы с Telegram ботом необходимо:" />
+                    <Label style="-fx-font-size: 11px;" text="1. Создать бота через @BotFather" />
+                    <Label style="-fx-font-size: 11px;" text="2. Получить токен бота" />
+                    <Label prefHeight="16.0" prefWidth="357.0" style="-fx-font-size: 11px;" text="3. Узнать chat ID (можно через @userinfobot) куда слать сообщения" />
+                    <Label style="-fx-font-size: 11px;" text="4. Ввести данные в поля выше" />
+                </VBox>
+            </VBox>
+        </Tab>
+    </tabs>
+</TabPane>
