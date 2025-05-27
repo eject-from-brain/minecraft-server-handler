@@ -59,6 +59,7 @@ public class ServerController {
 
         if (token.isEmpty() || chatId.isEmpty()) {
             appendToConsole("Ошибка: токен бота и chat ID должны быть заполнены");
+            telegramBot = null;
             return;
         }
 
@@ -68,6 +69,7 @@ public class ServerController {
             appendToConsole("Телеграм бот успешно подключен");
         } catch (Exception e) {
             appendToConsole("Ошибка подключения Telegram бота: " + e.getMessage());
+            telegramBot = null;
         }
     }
 
@@ -364,13 +366,22 @@ public class ServerController {
 
     private void sendServerStats() {
         if (!isServerRunning.get()) {
-            telegramBot.sendMessage("Сервер в данный момент не запущен");
+            appendToConsole("Ошибка: сервер в данный момент не запущен");
+            return;
+        }
+
+        if (telegramBot == null) {
+            appendToConsole("Ошибка: Telegram бот не настроен. Пожалуйста, укажите токен бота и chat ID во вкладке настроек.");
             return;
         }
 
         String stats = getServerStats();
-        telegramBot.sendMessage(stats);
-        appendToConsole("Статистика отправлена в Telegram:\n" + stats);
+        try {
+            telegramBot.sendMessage(stats);
+            appendToConsole("Статистика отправлена в Telegram:\n" + stats);
+        } catch (Exception e) {
+            appendToConsole("Ошибка отправки статистики в Telegram: " + e.getMessage());
+        }
     }
 
     private String getServerStats() {
