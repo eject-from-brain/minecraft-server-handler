@@ -23,6 +23,7 @@ import java.util.concurrent.Executors;
 
 public class ServerController {
     private int lineCounter = 0;
+    private long serverStartTime = 0;
     private static final int MAX_LINES = 200; // Максимальное количество строк перед очисткой
     private final StringBuilder consoleBuffer = new StringBuilder();
     private volatile boolean consoleUpdateScheduled = false;
@@ -166,9 +167,8 @@ public class ServerController {
         appendToConsole("--- Консоль была очищена вручную ---");
     }
 
-    // Методы работы с сервером
     private void startServer() {
-        // Сбрасываем флаг ручной остановки при новом запуске
+        serverStartTime = System.currentTimeMillis();
         isManualStop.set(false);
         // Инициализация Telegram бота в отдельном потоке
         CompletableFuture.runAsync(() -> {
@@ -204,7 +204,6 @@ public class ServerController {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         final String consoleLine = line;
-                        // Ограничение частоты обновления UI
                         Platform.runLater(() -> appendToConsole(consoleLine));
 
                         // Небольшая пауза для снижения нагрузки
@@ -251,7 +250,7 @@ public class ServerController {
     private void stopServer() {
         if (!isServerRunning.get()) return;
 
-        isManualStop.set(true); // Помечаем как ручную остановку
+        isManualStop.set(true);
         appendToConsole("Остановка сервера...");
         sendCommandToServer("stop");
 
@@ -278,7 +277,6 @@ public class ServerController {
         } catch (IOException e) {
             appendToConsole("Ошибка при очистке ресурсов: " + e.getMessage());
         } finally {
-            // Не сбрасываем isManualStop здесь, чтобы сохранить состояние
             isServerRunning.set(false);
         }
     }
@@ -391,12 +389,13 @@ public class ServerController {
         long maxMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024);
 
         return String.format(
-                "📊 Статистика сервера Minecraft (%s)\n" +
-                        "🔄 Состояние: работает\n" +
-                        "🧮 Память: %d/%dMB (Max: %dMB)\n" +
-                        "👥 Онлайн: %d игроков\n" +
-                        "⏱ TPS: %.1f\n" +
-                        "⏳ Время работы: %s",
+                """
+                        📊 Статистика сервера Minecraft (%s)
+                        🔄 Состояние: работает
+                        🧮 Память: %d/%dMB (Max: %dMB)
+                        👥 Онлайн: %s игроков
+                        ⏱ TPS: %s
+                        ⏳ Время работы: %s""",
                 dtf.format(LocalDateTime.now()),
                 totalMemory - freeMemory, totalMemory, maxMemory,
                 getOnlinePlayers(),
@@ -405,16 +404,96 @@ public class ServerController {
         );
     }
 
-    private int getOnlinePlayers() {
-        return 0; // TODO: реализовать
+    private String getOnlinePlayers() {
+        if (!isServerRunning.get()) return "Сервер не запущен";
+
+        try {
+            sendCommandToServer("list");
+            Thread.sleep(1000); // Чтобы успеть получить ответ
+            // Анализируем последние строки консоли
+            String consoleText = consoleOutput.getText();
+            String[] lines = consoleText.split("\n");
+
+            // Ищем строку с информацией об игроках
+            for (int i = lines.length - 1; i >= 0; i--) { // Пример строки: "There are 2/20 players online:"
+                if (lines[i].contains("players online")) {
+                    String[] parts = lines[i].split(" ");
+                    for (String part : parts) {
+                        if (part.matches("\\d+/\\d+")) {
+                            return part.split("/")[0];
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            appendToConsole("Ошибка при получении онлайн-игроков: " + e.getMessage());
+        }
+
+        return "Неизвестно количество";
     }
 
-    private double getTPS() {
-        return 20.0; // TODO: реализовать
+    private String getTPS() {
+        if (!isServerRunning.get()) return "Сервер не запущен";
+
+        try {
+            // Отправляем команду для получения данных о производительности
+            sendCommandToServer("tps");
+            Thread.sleep(1000); // Чтобы успеть получить ответ
+
+            // Анализируем последние строки консоли
+            String consoleText = consoleOutput.getText();
+            String[] lines = consoleText.split("\n");
+
+            // Ищем строку с TPS (последнюю строку с "TPS")
+            for (int i = lines.length - 1; i >= 0; i--) {
+                if (lines[i].contains("TPS")) {
+                    // Пример строки: "TPS from last 1m, 5m, 15m: 19.99, 20.00, 20.00"
+                    String tpsLine = lines[i];
+
+                    // Извлекаем последнее значение TPS (15 минут)
+                    String[] parts = tpsLine.split(":");
+                    if (parts.length > 1) {
+                        String[] tpsValues = parts[1].trim().split(",");
+                        if (tpsValues.length >= 3) {
+                            return tpsValues[2].trim();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            appendToConsole("Ошибка при получении TPS: " + e.getMessage());
+        }
+
+        return "Неизвестно...";
     }
 
     private String getUptime() {
-        return "N/A"; // TODO: реализовать
+        if (!isServerRunning.get() || serverStartTime == 0) {
+            return "N/A";
+        }
+
+        long uptimeMillis = System.currentTimeMillis() - serverStartTime;
+        return formatDuration(uptimeMillis);
+    }
+
+    private String formatDuration(long millis) {
+        long seconds = millis / 1000;
+        long days = seconds / 86400;
+        seconds %= 86400;
+        long hours = seconds / 3600;
+        seconds %= 3600;
+        long minutes = seconds / 60;
+        seconds %= 60;
+
+        if (days > 0) {
+            return String.format("%dд %dч %dм %dс", days, hours, minutes, seconds);
+        } else if (hours > 0) {
+            return String.format("%dч %dм %dс", hours, minutes, seconds);
+        } else if (minutes > 0) {
+            return String.format("%dм %dс", minutes, seconds);
+        } else {
+            return String.format("%dс", seconds);
+        }
     }
 
     private void appendToConsole(String text) {
