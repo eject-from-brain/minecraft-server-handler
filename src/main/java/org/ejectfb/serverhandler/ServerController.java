@@ -14,6 +14,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
@@ -147,6 +148,10 @@ public class ServerController {
             if (!command.isEmpty()) {
                 sendCommandToServer(command);
                 serverCommandInput.clear();
+                // Прокрутка вниз после ввода команды
+                Platform.runLater(() -> {
+                    consoleOutput.setScrollTop(Double.MAX_VALUE);
+                });
             }
         }
     }
@@ -155,6 +160,7 @@ public class ServerController {
     private void handleClearConsole() {
         consoleOutput.clear();
         lineCounter = 0;
+        lineCounterLabel.setText("Строк: " + lineCounter + "/" + MAX_LINES);
         appendToConsole("--- Консоль была очищена вручную ---");
     }
 
@@ -403,23 +409,31 @@ public class ServerController {
     private void appendToConsole(String text) {
         synchronized (consoleBuffer) {
             consoleBuffer.append(text).append("\n");
+            lineCounter++;
+            Platform.runLater(() -> lineCounterLabel.setText("Строк: " + Math.min(lineCounter, 200) + "/" + MAX_LINES));
 
             if (!consoleUpdateScheduled) {
                 consoleUpdateScheduled = true;
                 Platform.runLater(() -> {
                     synchronized (consoleBuffer) {
+                        // Сохраняем текущую позицию скролла
+                        double scrollPosition = consoleOutput.getScrollTop();
+
                         consoleOutput.appendText(consoleBuffer.toString());
                         consoleBuffer.setLength(0);
                         consoleUpdateScheduled = false;
 
-                        // Автоочистка при превышении лимита
-                        if (consoleOutput.getLength() > 100_000) {
-                            consoleOutput.replaceText(
-                                    consoleOutput.getLength() - 50_000,
-                                    consoleOutput.getLength(),
-                                    "\n--- TRUNCATED ---\n"
-                            );
+                        String[] lines = consoleOutput.getText().split("\n");
+                        if (lines.length > MAX_LINES) {
+                            String trimmedText = String.join("\n",
+                                    Arrays.copyOfRange(lines, lines.length - MAX_LINES, lines.length));
+                            consoleOutput.setText(trimmedText);
+                            lineCounter = MAX_LINES;
+                            lineCounterLabel.setText("Строк: " + lineCounter + "/" + MAX_LINES);
                         }
+
+                        // Автоматическая прокрутка вниз
+                        consoleOutput.setScrollTop(Double.MAX_VALUE);
                     }
                 });
             }
