@@ -6,11 +6,19 @@ import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.fxml.FXML;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -20,6 +28,8 @@ import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ServerController {
     private int lineCounter = 0;
@@ -52,6 +62,8 @@ public class ServerController {
     // Свойства для биндинга
     private final BooleanProperty isServerRunning = new SimpleBooleanProperty(false);
     private final BooleanProperty isManualStop = new SimpleBooleanProperty(false);
+    private volatile StatsData currentStatsData;
+    private ScheduledExecutorService statsScheduler = Executors.newSingleThreadScheduledExecutor();
 
     @FXML
     private void testTelegramConnection() {
@@ -126,7 +138,7 @@ public class ServerController {
 
     @FXML
     private void handleSendStats() {
-        sendServerStats();
+        requestStats();
     }
 
     @FXML
@@ -357,7 +369,7 @@ public class ServerController {
         statsTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                sendServerStats();
+                requestStats();
             }
         }, pollIntervalHours * 3600 * 1000L, pollIntervalHours * 3600 * 1000L);
     }
@@ -384,45 +396,54 @@ public class ServerController {
 
     private String getServerStats() {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        long freeMemory = Runtime.getRuntime().freeMemory() / (1024 * 1024);
-        long totalMemory = Runtime.getRuntime().totalMemory() / (1024 * 1024);
-        long maxMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024);
-
         return String.format(
                 """
                         📊 Статистика сервера Minecraft (%s)
                         🔄 Состояние: работает
-                        🧮 Память: %d/%dMB (Max: %dMB)
+                        🧮 Память: %s
                         👥 Онлайн: %s игроков
                         ⏱ TPS: %s
                         ⏳ Время работы: %s""",
                 dtf.format(LocalDateTime.now()),
-                totalMemory - freeMemory, totalMemory, maxMemory,
-                getOnlinePlayers(),
-                getTPS(),
+                currentStatsData.getMemory(),
+                currentStatsData.getOnlinePlayers(),
+                currentStatsData.getTps(),
                 getUptime()
         );
     }
 
-    private String getOnlinePlayers() {
-        if (!isServerRunning.get()) return "Сервер не запущен";
-
+    private String parseOnlinePlayers() {
         try {
-            sendCommandToServer("list");
-            Thread.sleep(1000); // Чтобы успеть получить ответ
             // Анализируем последние строки консоли
             String consoleText = consoleOutput.getText();
             String[] lines = consoleText.split("\n");
 
             // Ищем строку с информацией об игроках
+            String matchPhrase = "[Server thread/INFO]: There are ";
             for (int i = lines.length - 1; i >= 0; i--) { // Пример строки: "There are 2/20 players online:"
-                if (lines[i].contains("players online")) {
-                    String[] parts = lines[i].split(" ");
-                    for (String part : parts) {
-                        if (part.matches("\\d+/\\d+")) {
-                            return part.split("/")[0];
-                        }
-                    }
+                if (lines[i].contains(matchPhrase)) {
+                    String result = lines[i].substring(lines[i].indexOf(matchPhrase) + matchPhrase.length());
+                    return result.substring(0, result.indexOf(" "));
+                }
+            }
+        } catch (Exception e) {
+            appendToConsole("Ошибка при получении онлайн-игроков: " + e.getMessage());
+        }
+
+        return "Неизвестно количество";
+    }
+    private String parseMemory() {
+        try {
+            // Анализируем последние строки консоли
+            String consoleText = consoleOutput.getText();
+            String[] lines = consoleText.split("\n");
+
+            // Ищем строку с информацией об игроках
+            String matchPhrase = "Current Memory Usage: ";
+            String matchMbPhrase = "mb";
+            for (int i = lines.length - 1; i >= 0; i--) { // Пример строки: "There are 2/20 players online:"
+                if (lines[i].contains(matchPhrase)) {
+                    return lines[i].substring(lines[i].indexOf(matchPhrase) + matchPhrase.length());
                 }
             }
         } catch (Exception e) {
@@ -432,14 +453,10 @@ public class ServerController {
         return "Неизвестно количество";
     }
 
-    private String getTPS() {
+    private String parseTPS() {
         if (!isServerRunning.get()) return "Сервер не запущен";
 
         try {
-            // Отправляем команду для получения данных о производительности
-            sendCommandToServer("tps");
-            Thread.sleep(1000); // Чтобы успеть получить ответ
-
             // Анализируем последние строки консоли
             String consoleText = consoleOutput.getText();
             String[] lines = consoleText.split("\n");
@@ -453,9 +470,9 @@ public class ServerController {
                     // Извлекаем последнее значение TPS (15 минут)
                     String[] parts = tpsLine.split(":");
                     if (parts.length > 1) {
-                        String[] tpsValues = parts[1].trim().split(",");
+                        String[] tpsValues = parts[4].trim().split(",");
                         if (tpsValues.length >= 3) {
-                            return tpsValues[2].trim();
+                            return tpsValues[0].trim();
                         }
                     }
                 }
@@ -537,5 +554,28 @@ public class ServerController {
 
     private void saveSettings() {
         // TODO: реализовать
+    }
+
+    private void requestStats() {
+        appendToConsole("Запрос статистики сервера...");
+        sendCommandToServer("list");
+        sendCommandToServer("tps");
+
+        // Запускаем 5-секундный таймер перед сбором статистики
+        statsScheduler.schedule(() -> {
+            Platform.runLater(() -> {
+                appendToConsole("Сбор данных статистики...");
+                collectStatsData();
+            });
+        }, 5, TimeUnit.SECONDS);
+    }
+
+    private void collectStatsData() {
+        currentStatsData = new StatsData();
+        currentStatsData.setTps(parseTPS());
+        currentStatsData.setOnlinePlayers(parseOnlinePlayers());
+        currentStatsData.setMemory(parseMemory());
+
+        if (currentStatsData.isComplete()) sendServerStats();
     }
 }
