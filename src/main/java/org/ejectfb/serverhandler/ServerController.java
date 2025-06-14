@@ -201,8 +201,14 @@ public class ServerController {
             appendToConsole("Запуск сервера: " + command);
 
             // Настройка ProcessBuilder с буферизацией
-            ProcessBuilder pb = new ProcessBuilder("cmd", "/c", command)
-                    .redirectErrorStream(true);
+            ProcessBuilder pb;
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                pb = new ProcessBuilder("cmd", "/c", command);
+            } else {
+                pb = new ProcessBuilder("/bin/sh", "-c", command);
+            }
+
+            pb.redirectErrorStream(true);
             pb.environment().put("JAVA_TOOL_OPTIONS", "-Dfile.encoding=UTF-8");
 
             serverProcess = pb.start();
@@ -548,7 +554,7 @@ public class ServerController {
     }
 
     private void loadSettings() {
-        serverCommandField.setText("java -Xmx8G -Xms1G -Dfile.encoding=UTF-8 -jar spigot-1.20.1.jar nogui --world-dir=C:\\MinecraftSreverWorlds");
+        serverCommandField.setText("java -Xmx8G -Xms1G -Dfile.encoding=UTF-8 -jar spigot-1.20.1.jar nogui --world-dir=./worlds");
         pollIntervalField.setText(String.valueOf(pollIntervalHours));
     }
 
