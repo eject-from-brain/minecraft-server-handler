@@ -13,6 +13,8 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import org.ejectfb.serverhandler.services.ServerDataService;
+import org.ejectfb.serverhandler.services.TelegramBotService;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -57,12 +59,12 @@ public class ServerController {
     private ExecutorService executorService;
     private Timer statsTimer;
     private int pollIntervalHours = 3;
-    private TelegramBot telegramBot;
+    private TelegramBotService telegramBot;
 
     // Свойства для биндинга
     private final BooleanProperty isServerRunning = new SimpleBooleanProperty(false);
     private final BooleanProperty isManualStop = new SimpleBooleanProperty(false);
-    private volatile StatsData currentStatsData;
+    private volatile ServerDataService currentStatsData;
     private ScheduledExecutorService statsScheduler = Executors.newSingleThreadScheduledExecutor();
 
     @FXML
@@ -77,9 +79,8 @@ public class ServerController {
         }
 
         try {
-            telegramBot = new TelegramBot(token, chatId);
-            telegramBot.sendMessage("✅ Проверка соединения: бот успешно подключен!");
-            appendToConsole("Телеграм бот успешно подключен");
+            telegramBot = new TelegramBotService(token, chatId);
+            if (telegramBot.isBotConnected()) appendToConsole("Телеграм бот успешно подключен");
         } catch (Exception e) {
             appendToConsole("Ошибка подключения Telegram бота: " + e.getMessage());
             telegramBot = null;
@@ -118,7 +119,7 @@ public class ServerController {
         }
 
         try {
-            telegramBot = new TelegramBot(token, chatId);
+            telegramBot = new TelegramBotService(token, chatId);
         } catch (Exception e) {
             appendToConsole("Ошибка инициализации Telegram бота: " + e.getMessage());
         }
@@ -577,7 +578,7 @@ public class ServerController {
     }
 
     private void collectStatsData() {
-        currentStatsData = new StatsData();
+        currentStatsData = new ServerDataService();
         currentStatsData.setTps(parseTPS());
         currentStatsData.setOnlinePlayers(parseOnlinePlayers());
         currentStatsData.setMemory(parseMemory());

@@ -1,13 +1,13 @@
-package org.ejectfb.serverhandler;
+package org.ejectfb.serverhandler.services;
 
-public class StatsData {
+public class ServerDataService {
     private String onlinePlayers = null;
     private String tps = null;
     private String memory = null;
 
-    public StatsData() {}
+    public ServerDataService() {}
 
-    public StatsData(String onlinePlayers, String tps, String memory) {
+    public ServerDataService(String onlinePlayers, String tps, String memory) {
         this.onlinePlayers = onlinePlayers;
         this.tps = tps;
         this.memory = memory;
